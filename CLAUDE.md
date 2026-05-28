@@ -4,7 +4,11 @@ Kohlenhydrat-Rechner für Diabetiker. Einzelne HTML-Datei, kein Framework, kein 
 
 ## Architektur
 
-Alles in `index.html` – HTML, CSS und JS in einer Datei. Kein externes Tooling.
+Drei Dateien, kein Build-Step, kein Framework:
+- `index.html` – HTML-Struktur
+- `style.css` – alle Styles
+- `app.js` – gesamte Logik
+
 Für HTTPS auf Mobilgeräten (Kamera-Zugriff): `npx serve` + `npx cloudflared tunnel --url http://localhost:8080` (zwei Terminals).
 
 ## State & Persistenz
