@@ -263,8 +263,9 @@ async function apiBLS(query) {
 async function apiOFFSearch(query) {
   try {
     const url =
-      `https://world.openfoodfacts.org/api/v2/search` +
+      `https://world.openfoodfacts.org/cgi/search.pl` +
       `?search_terms=${encodeURIComponent(query)}` +
+      `&search_simple=1&action=process&json=1` +
       `&fields=product_name,product_name_de,nutriments,brands,serving_quantity` +
       `&lc=de&cc=de&page_size=20&sort_by=popularity_key`;
     const r = await timedFetch(url, 5000);
