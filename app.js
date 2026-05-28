@@ -8,6 +8,7 @@ let state = {
   myFoods: [],    // {id, name, carbs100g, source}
   myMeals: [],    // {id, name, items:[{id,name,carbs100g,amount,source}]}
   meal: [],       // current meal items
+  mealHistory: [], // [{id, ts, kh, items:[...]}] – max 20, newest first
 };
 
 let searchCache = [];
@@ -26,18 +27,20 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const s = JSON.parse(raw);
-    state.myFoods = s.myFoods || [];
-    state.myMeals = s.myMeals || [];
-    state.meal    = s.meal    || [];
+    state.myFoods     = s.myFoods     || [];
+    state.myMeals     = s.myMeals     || [];
+    state.meal        = s.meal        || [];
+    state.mealHistory = s.mealHistory || [];
   } catch(e) { /* corrupt – start fresh */ }
 }
 
 function persist() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      myFoods: state.myFoods,
-      myMeals: state.myMeals,
-      meal:    state.meal,
+      myFoods:     state.myFoods,
+      myMeals:     state.myMeals,
+      meal:        state.meal,
+      mealHistory: state.mealHistory,
     }));
   } catch(e) {
     toast('Speichern fehlgeschlagen – Speicher möglicherweise voll.', 'error');
@@ -76,6 +79,22 @@ function flashBtn(el, cls = 'btn-flash-ok', ms = 650) {
   if (!el) return;
   el.classList.add(cls);
   setTimeout(() => el.classList.remove(cls), ms);
+}
+
+function fmtDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `Heute, ${time}`;
+  if (d.toDateString() === new Date(now - 864e5).toDateString()) return `Gestern, ${time}`;
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + `, ${time}`;
+}
+
+function addToHistory(items) {
+  if (!items.length) return;
+  const kh = items.reduce((s, it) => s + calcKH(it.carbs100g, it.amount), 0);
+  state.mealHistory.unshift({ id: uid(), ts: Date.now(), kh, items: items.map(it => ({ ...it })) });
+  if (state.mealHistory.length > 20) state.mealHistory.length = 20;
 }
 
 let _toastTimer;
@@ -121,7 +140,7 @@ function showTab(name) {
     }
     renderSearchQuick();
   }
-  if (name === 'favorites') { renderFoods(); renderMeals(); }
+  if (name === 'favorites') { renderFoods(); renderMeals(); renderHistory(); }
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn =>
@@ -537,6 +556,7 @@ function renderMeal() {
 document.getElementById('clear-meal-btn').addEventListener('click', () => {
   if (!state.meal.length) return;
   if (!confirm('Aktuelle Mahlzeit leeren?')) return;
+  addToHistory(state.meal);
   state.meal = [];
   persist(); refreshFooter(); renderMeal();
   flashBtn(document.getElementById('clear-meal-btn'), 'btn-flash-warn');
@@ -722,8 +742,10 @@ document.getElementById('search-tip-card').addEventListener('click', () => {
 function updateFavCounts() {
   const fc = document.getElementById('fav-foods-count');
   const mc = document.getElementById('fav-meals-count');
+  const hc = document.getElementById('fav-history-count');
   if (fc) fc.textContent = state.myFoods.length;
   if (mc) mc.textContent = state.myMeals.length;
+  if (hc) hc.textContent = state.mealHistory.length;
 }
 
 function renderFoods() {
@@ -827,7 +849,43 @@ function loadMeal(id) {
   const m = state.myMeals.find(x => x.id === id);
   if (!m) return;
   if (state.meal.length && !confirm('Aktuelle Mahlzeit wird ersetzt. Fortfahren?')) return;
+  addToHistory(state.meal);
   state.meal = m.items.map(it => ({ ...it, id: uid() }));
+  persist(); refreshFooter();
+  showTab('meal');
+}
+
+function renderHistory() {
+  const box = document.getElementById('fav-history-list');
+  if (!box) return;
+  updateFavCounts();
+  if (!state.mealHistory.length) {
+    box.innerHTML = `<div class="fav-empty">Noch kein Verlauf.<br>Wird automatisch gespeichert, wenn du eine Mahlzeit leerst.</div>`;
+    return;
+  }
+  box.innerHTML = state.mealHistory.map(h => {
+    const preview = h.items.slice(0, 3).map(it => `${esc(it.name)} (${it.amount} ${it.unit || 'g'})`).join(', ')
+      + (h.items.length > 3 ? ` +${h.items.length - 3} weitere` : '');
+    return `
+    <div class="fav-food-row">
+      <div class="fav-food-info">
+        <div class="fav-food-name">${fmtDate(h.ts)}</div>
+        <div class="fav-food-sub">${fmt1(h.kh)} g KH · ${preview}</div>
+      </div>
+      <button class="btn btn-primary" style="padding:9px 13px;flex-shrink:0"
+              onclick="loadHistory('${h.id}')" aria-label="In KH-Rechner laden">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function loadHistory(id) {
+  const h = state.mealHistory.find(x => x.id === id);
+  if (!h) return;
+  if (state.meal.length && !confirm('Aktuelle Mahlzeit wird ersetzt. Fortfahren?')) return;
+  addToHistory(state.meal);
+  state.meal = h.items.map(it => ({ ...it, id: uid() }));
   persist(); refreshFooter();
   showTab('meal');
 }
@@ -1033,10 +1091,20 @@ async function handleBarcode(barcode) {
 // ══════════════════════════════════════════════════════
 function openFavPicker() {
   const list = document.getElementById('fav-picker-list');
-  if (!state.myFoods.length) {
+  const hasFoods = state.myFoods.length > 0;
+  const hasMeals = state.myMeals.length > 0;
+
+  if (!hasFoods && !hasMeals) {
     list.innerHTML = `<div class="fav-empty">Noch keine Favoriten gespeichert.<br>Suche ein Lebensmittel und speichere es.</div>`;
-  } else {
-    list.innerHTML = state.myFoods.map(f => `
+    document.getElementById('fav-picker-modal').classList.add('open');
+    return;
+  }
+
+  let html = '';
+
+  if (hasFoods) {
+    html += `<div class="search-quick-label" style="padding:4px 0 6px">Lebensmittel</div>`;
+    html += state.myFoods.map(f => `
       <div class="fav-food-row">
         <div class="fav-food-info">
           <div class="fav-food-name">${esc(f.name)}</div>
@@ -1048,7 +1116,34 @@ function openFavPicker() {
         </button>
       </div>`).join('');
   }
+
+  if (hasMeals) {
+    html += `<div class="search-quick-label" style="padding:${hasFoods ? '14px' : '4px'} 0 6px">Mahlzeiten</div>`;
+    html += state.myMeals.map(m => {
+      const kh = m.items.reduce((s, it) => s + calcKH(it.carbs100g, it.amount), 0);
+      const preview = m.items.slice(0, 2).map(it => esc(it.name)).join(', ')
+        + (m.items.length > 2 ? ` +${m.items.length - 2}` : '');
+      return `
+      <div class="fav-food-row">
+        <div class="fav-food-info">
+          <div class="fav-food-name">${esc(m.name)}</div>
+          <div class="fav-food-sub">${fmt1(kh)} g KH · ${preview}</div>
+        </div>
+        <button class="btn btn-primary" style="padding:9px 13px;flex-shrink:0"
+                onclick="pickMeal('${m.id}')" aria-label="Laden">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>`;
+    }).join('');
+  }
+
+  list.innerHTML = html;
   document.getElementById('fav-picker-modal').classList.add('open');
+}
+
+function pickMeal(id) {
+  document.getElementById('fav-picker-modal').classList.remove('open');
+  loadMeal(id);
 }
 
 function pickFav(id) {

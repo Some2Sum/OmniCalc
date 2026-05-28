@@ -84,11 +84,13 @@ Lebensmittel haben ein `unit`-Feld (`'g'` oder `'ml'`, Default `'g'`). Die KH-Be
 
 ## PWA / Service Worker
 
-Cache-Name in `sw.js`: `omnicalc-v1`.
+Cache-Name in `sw.js`: aktuell `omnicalc-v4`.
 
-**Nach jeder Änderung an `index.html`, `style.css` oder `app.js` muss der Cache-Name erhöht werden** (z.B. `omnicalc-v2`), damit Nutzer mit installierter PWA die neue Version erhalten. Der SW löscht beim Aktivieren automatisch alle Caches mit altem Namen.
+**Strategie:** `index.html` wird **network-first** geliefert (immer frisch, Offline-Fallback auf Cache). `style.css` und `app.js` werden **cache-first** geliefert.
 
-API-Calls (BLS, OFF, ZXing CDN) werden nie gecacht – immer live. Nur die App-Shell liegt im Cache.
+**Nach jeder Änderung an `style.css` oder `app.js` muss der Cache-Name erhöht werden** (z.B. `omnicalc-v4`), damit Nutzer die neue Version erhalten. Bei `index.html`-Änderungen ist kein Cache-Bump nötig — die Datei wird immer live geladen.
+
+API-Calls (BLS, OFF, ZXing CDN) werden nie gecacht – immer live.
 
 ## Was vermeiden
 
