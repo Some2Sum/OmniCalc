@@ -16,6 +16,7 @@ let nameModalCb = null;
 let scannerActive = false;
 let zxingLoaded = false;
 let activeCReader = null;
+let torchOn = false;
 
 // ══════════════════════════════════════════════════════
 // STORAGE
@@ -887,6 +888,14 @@ document.getElementById('scan-btn').addEventListener('click', () => {
 
 document.getElementById('scanner-close').addEventListener('click', stopScanner);
 
+document.getElementById('torch-btn').addEventListener('click', async () => {
+  const track = document.getElementById('scanner-video')?.srcObject?.getVideoTracks()[0];
+  if (!track) return;
+  torchOn = !torchOn;
+  try { await track.applyConstraints({ advanced: [{ torch: torchOn }] }); } catch(_) {}
+  document.getElementById('torch-btn').classList.toggle('active', torchOn);
+});
+
 async function loadZXing() {
   if (zxingLoaded) return;
   return new Promise((res, rej) => {
@@ -915,36 +924,47 @@ async function startScanner() {
 
     status.textContent = 'Kamera wird gestartet…';
 
-    try {
-      const probe = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } }
-      });
-      probe.getTracks().forEach(t => t.stop());
-    } catch(_) { /* permission denied handled below */ }
-
-    let deviceId;
-    try {
-      const devs = await navigator.mediaDevices.enumerateDevices();
-      const cams = devs.filter(d => d.kind === 'videoinput');
-      const back = cams.find(d => /back|environment|rear|rück/i.test(d.label));
-      deviceId = back?.deviceId ?? (cams.length > 1 ? cams[cams.length - 1].deviceId : cams[0]?.deviceId);
-    } catch(_) { /* use default */ }
-
-    const reader = new ZXing.BrowserMultiFormatReader();
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_128,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZXing.BrowserMultiFormatReader(hints);
     activeCReader = reader;
+
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: 'continuous' }],
+      }
+    };
+
     status.textContent = 'Barcode in den Rahmen halten…';
 
-    reader.decodeFromVideoDevice(deviceId, 'scanner-video', async (result, err) => {
+    reader.decodeFromConstraints(constraints, 'scanner-video', async (result, err) => {
       if (!scannerActive) return;
       if (result) {
-        const code = result.getText();
+        if (navigator.vibrate) navigator.vibrate(50);
         stopScanner();
-        await handleBarcode(code);
+        await handleBarcode(result.getText());
       }
     });
 
+    setTimeout(() => {
+      const track = document.getElementById('scanner-video')?.srcObject?.getVideoTracks()[0];
+      if (track?.getCapabilities?.()?.torch) {
+        document.getElementById('torch-btn').classList.remove('hidden');
+      }
+    }, 1200);
+
   } catch(err) {
-    console.error('[Scanner]', err);
+    console.warn('[Scanner]', err);
     if (err.name === 'NotAllowedError') {
       status.textContent =
         'Kamerazugriff verweigert. Bitte in den Browser-Einstellungen die Kamera-Berechtigung für diese Seite aktivieren.';
@@ -956,6 +976,9 @@ async function startScanner() {
 
 function stopScanner() {
   scannerActive = false;
+  torchOn = false;
+  const torchBtn = document.getElementById('torch-btn');
+  if (torchBtn) { torchBtn.classList.add('hidden'); torchBtn.classList.remove('active'); }
   if (activeCReader) {
     try { activeCReader.reset(); } catch(_) {}
     activeCReader = null;

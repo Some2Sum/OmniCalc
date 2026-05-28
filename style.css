@@ -394,6 +394,20 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 
+.overlay-torch {
+  width: 44px; height: 44px;
+  border: 1.5px solid rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.1); color: #fff;
+  border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.overlay-torch.active {
+  background: rgba(255, 220, 80, 0.35);
+  border-color: rgba(255, 220, 80, 0.8);
+  color: #ffd840;
+}
+.overlay-torch.hidden { display: none; }
+
 #scanner-wrap { position: relative; width: min(90vw, 380px); }
 #scanner-video {
   width: 100%; border-radius: 16px; display: block; background: #000;
