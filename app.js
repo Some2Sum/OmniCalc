@@ -156,6 +156,59 @@ function detectUnit(name) {
 }
 
 // ══════════════════════════════════════════════════════
+// PORTION HINTS
+// ══════════════════════════════════════════════════════
+const PORTION_HINTS = [
+  // Obst
+  ['banane',      120], ['apfel',       150], ['birne',       150],
+  ['orange',      130], ['mandarine',    80], ['kiwi',         80],
+  ['erdbeere',    150], ['himbeere',    100], ['weintraub',   150],
+  ['pfirsich',    130], ['pflaume',      50], ['mango',       150],
+  ['ananas',      150], ['melone',      200], ['avocado',     100],
+  // Gemüse
+  ['tomate',      100], ['gurke',       150], ['paprika',     150],
+  ['brokkoli',    150], ['zucchini',    200], ['mohre',       100],
+  ['karotte',     100], ['zwiebel',      80], ['knoblauch',     5],
+  ['spinat',      100], ['salat',        60], ['kohl',        150],
+  ['erbsen',       80], ['mais',        100], ['bohnen',      100],
+  // Getreide & Frühstück
+  ['haferflocken', 60], ['cornflakes',   40], ['musli',        60],
+  ['granola',      50],
+  // Brot & Backwaren
+  ['brotchen',     60], ['toast',        25], ['brot',         50],
+  ['croissant',    60], ['brezel',       80],
+  // Nudeln & Reis (roh)
+  ['nudeln',       80], ['spaghetti',    80], ['reis',         70],
+  ['couscous',     70], ['quinoa',       70],
+  // Milch & Käse
+  ['milch',       200], ['joghurt',     150], ['quark',       150],
+  ['gouda',        30], ['mozzarella',  125], ['feta',         50],
+  ['kase',         30], ['frischkase',   30], ['sahne',        30],
+  // Getränke
+  ['saft',        200], ['cola',        250], ['bier',        330],
+  ['wein',        150], ['kaffee',      200], ['tee',         200],
+  ['smoothie',    250], ['limo',        250], ['wasser',      250],
+  // Fleisch & Fisch
+  ['hahnchen',    150], ['schwein',     150], ['rind',        150],
+  ['hackfleisch', 150], ['wurst',        30], ['lachs',       150],
+  ['thunfisch',    80], ['garnele',     100],
+  // Eier & Sonstiges
+  ['ei',           60], ['butter',       10], ['margarine',    10],
+  ['ol',           10], ['zucker',       10], ['honig',        15],
+  ['nutella',      20], ['marmelade',    20], ['schokolade',   20],
+  ['chips',        30], ['gummibarchen', 50],
+];
+
+function suggestPortion(name, servingG) {
+  if (servingG > 0 && servingG <= 2000) return Math.round(servingG);
+  const n = normDE(name);
+  for (const [key, portion] of PORTION_HINTS) {
+    if (n.includes(key)) return portion;
+  }
+  return 100;
+}
+
+// ══════════════════════════════════════════════════════
 // APIs
 // ══════════════════════════════════════════════════════
 async function timedFetch(url, ms = 7000) {
@@ -213,7 +266,7 @@ async function apiOFFSearch(query) {
       `https://world.openfoodfacts.org/cgi/search.pl` +
       `?search_terms=${encodeURIComponent(query)}` +
       `&search_simple=1&action=process&json=1` +
-      `&fields=product_name,product_name_de,nutriments,brands` +
+      `&fields=product_name,product_name_de,nutriments,brands,serving_quantity` +
       `&lc=de&cc=de&page_size=50&sort_by=popularity_key`;
     const r = await timedFetch(url);
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -231,6 +284,7 @@ async function apiOFFSearch(query) {
         id: uid(), name: displayName,
         carbs100g: c, source: 'OFF',
         unit: detectUnit(displayName),
+        portionHint: safeNum(p.serving_quantity) || 0,
       };
     }).filter(Boolean);
 
@@ -243,7 +297,7 @@ async function apiOFFSearch(query) {
 async function apiOFFBarcode(barcode) {
   const r = await fetch(
     `https://world.openfoodfacts.org/api/v0/product/${barcode}.json` +
-    `?fields=product_name,nutriments,brands`
+    `?fields=product_name,nutriments,brands,serving_quantity`
   );
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
@@ -257,6 +311,7 @@ async function apiOFFBarcode(barcode) {
     carbs100g: hasCarbs ? safeNum(p.nutriments.carbohydrates_100g) : null,
     source: 'OFF',
     hasCarbs,
+    portionHint: safeNum(p.serving_quantity) || 0,
   };
 }
 
@@ -408,7 +463,8 @@ async function runSearch(query) {
 }
 
 function searchCard(it, i) {
-  const kh = fmt1(calcKH(it.carbs100g, 100));
+  const portion = suggestPortion(it.name, it.portionHint || 0);
+  const kh = fmt1(calcKH(it.carbs100g, portion));
   const alreadySaved = !!state.myFoods.find(f => f.name.toLowerCase() === it.name.toLowerCase());
   const savedCls = alreadySaved ? ' saved' : '';
   const savedTitle = alreadySaved ? 'Gespeichert – erneut klicken zum Entfernen' : 'Als Favorit speichern';
@@ -422,7 +478,7 @@ function searchCard(it, i) {
     </div>
     <div class="amount-row">
       <input type="number" inputmode="decimal" class="amount-input s-amt"
-             data-si="${i}" value="100" min="1">
+             data-si="${i}" value="${portion}" min="1">
       <button class="unit-toggle s-unit${it.unit === 'ml' ? ' ml' : ''}" data-si="${i}" data-unit="${it.unit || 'g'}">${it.unit || 'g'}</button>
       <div class="kh-live-wrap">
         <span class="kh-live-pre">Das ergibt</span>
