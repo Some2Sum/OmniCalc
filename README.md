@@ -20,6 +20,23 @@ A carbohydrate calculator for people with diabetes — designed to calculate mea
 4. Repeat for each item in your meal
 5. Read the total KH (carbohydrate) value at the top
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/search.jpg" width="200" alt="Search"/></td>
+    <td><img src="docs/screenshots/calculator.jpg" width="200" alt="Calculator"/></td>
+    <td><img src="docs/screenshots/favorites.jpg" width="200" alt="Favorites"/></td>
+    <td><img src="docs/screenshots/scanner.jpg" width="200" alt="Scanner"/></td>
+  </tr>
+  <tr>
+    <td align="center">Search</td>
+    <td align="center">KH Calculator</td>
+    <td align="center">Favorites</td>
+    <td align="center">Barcode Scanner</td>
+  </tr>
+</table>
+
 ## Tech
 
 - Single `index.html` file — no framework, no build step
