@@ -4,10 +4,13 @@ Kohlenhydrat-Rechner für Diabetiker. Einzelne HTML-Datei, kein Framework, kein 
 
 ## Architektur
 
-Drei Dateien, kein Build-Step, kein Framework:
+Fünf Dateien plus PWA-Assets, kein Build-Step, kein Framework:
 - `index.html` – HTML-Struktur
 - `style.css` – alle Styles
 - `app.js` – gesamte Logik
+- `manifest.json` – PWA-Manifest (Name, Icons, Theme-Color)
+- `sw.js` – Service Worker (Cache-First für App-Shell, Network-Only für APIs)
+- `icon-192.svg` / `icon-512.svg` – Home-Screen-Icons
 
 Für HTTPS auf Mobilgeräten (Kamera-Zugriff): `npx serve` + `npx cloudflared tunnel --url http://localhost:8080` (zwei Terminals).
 
@@ -79,9 +82,17 @@ Wichtig: nicht vereinfachen ohne Grund – jede Stufe löst ein konkretes Proble
 
 Lebensmittel haben ein `unit`-Feld (`'g'` oder `'ml'`, Default `'g'`). Die KH-Berechnung ist identisch (`carbs100 × amount / 100`), nur die Anzeige ändert sich. Das `unit`-Feld wird in `saveFood()`, `addToMeal()` und allen Render-Funktionen propagiert. Suchkarten zeigen einen Toggle-Button (`.unit-toggle`) zwischen g und ml.
 
+## PWA / Service Worker
+
+Cache-Name in `sw.js`: `omnicalc-v1`.
+
+**Nach jeder Änderung an `index.html`, `style.css` oder `app.js` muss der Cache-Name erhöht werden** (z.B. `omnicalc-v2`), damit Nutzer mit installierter PWA die neue Version erhalten. Der SW löscht beim Aktivieren automatisch alle Caches mit altem Namen.
+
+API-Calls (BLS, OFF, ZXing CDN) werden nie gecacht – immer live. Nur die App-Shell liegt im Cache.
+
 ## Was vermeiden
 
 - Kein `console.error` für erwartete API-Fehler (BLS CORS) – nur `console.warn`.
 - KH-Summe nie direkt aus dem DOM lesen – immer aus `state.meal` berechnen.
 - `renderFoods()` / `renderMeals()` rufen `updateFavCounts()` intern auf – nicht doppelt aufrufen.
-- Keine neuen Dateien anlegen – alles bleibt in `index.html`.
+- Keine neuen App-Dateien anlegen – Logik bleibt in `app.js`, Styles in `style.css`, Struktur in `index.html`. PWA-Infrastruktur (Manifest, SW, Icons) ist die Ausnahme.
