@@ -263,12 +263,11 @@ async function apiBLS(query) {
 async function apiOFFSearch(query) {
   try {
     const url =
-      `https://world.openfoodfacts.org/cgi/search.pl` +
+      `https://world.openfoodfacts.org/api/v2/search` +
       `?search_terms=${encodeURIComponent(query)}` +
-      `&search_simple=1&action=process&json=1` +
       `&fields=product_name,product_name_de,nutriments,brands,serving_quantity` +
-      `&lc=de&cc=de&page_size=50&sort_by=popularity_key`;
-    const r = await timedFetch(url);
+      `&lc=de&cc=de&page_size=20&sort_by=popularity_key`;
+    const r = await timedFetch(url, 5000);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
 
@@ -391,6 +390,14 @@ function setPcache(q, items) {
   } catch {}
 }
 
+function isBasicFood(itemName, query) {
+  const stripped = normDE(itemName.replace(/\s*\(.*?\)\s*/g, '').trim());
+  const q = normDE(query.trim());
+  if (!stripped.startsWith(q)) return false;
+  const remainder = stripped.slice(q.length);
+  return remainder === '' || (remainder.length <= 2 && !/\s/.test(remainder));
+}
+
 let _searchTimer;
 let _searchSeq = 0;
 
@@ -451,7 +458,7 @@ async function runSearch(query) {
   if (seq !== _searchSeq) return;
 
   if (off === null) {
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 300));
     if (seq !== _searchSeq) return;
     off = await apiOFFSearch(query);
     if (seq !== _searchSeq) return;
@@ -481,7 +488,13 @@ async function runSearch(query) {
       else
         html = `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".<br>Versuche einen anderen Begriff.</p></div>`;
     } else {
-      html = items.map((it,i) => searchCard(it,i)).join('');
+      const basic = items.filter(it => isBasicFood(it.name, query));
+      const processed = items.filter(it => !isBasicFood(it.name, query));
+      const twoGroups = basic.length > 0 && processed.length > 0;
+      if (twoGroups) html += `<div class="search-group-hd">Lebensmittel</div>`;
+      html += basic.map((it, i) => searchCard(it, i)).join('');
+      if (twoGroups) html += `<div class="search-group-hd">Verarbeitete Produkte</div>`;
+      html += processed.map((it, i) => searchCard(it, basic.length + i)).join('');
     }
     box.innerHTML = html;
     bindSearchCards();

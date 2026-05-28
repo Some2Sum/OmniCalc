@@ -123,6 +123,14 @@ body {
 }
 .icon-btn:active { opacity: 0.8; }
 
+/* ── SUCHERGEBNIS-GRUPPEN ───────────────── */
+.search-group-hd {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.8px;
+  padding: 14px 4px 6px;
+}
+.search-group-hd:first-child { padding-top: 4px; }
+
 /* ── CARDS ──────────────────────────────── */
 .card {
   background: var(--surface); border-radius: 18px;
