@@ -372,7 +372,7 @@ function setCached(q, items) {
   _qCache.set(q, { items, ts: Date.now() });
 }
 
-const PCACHE_KEY = 'kh_scache';
+const PCACHE_KEY = 'kh_scache2';
 const PCACHE_TTL = 24 * 60 * 60 * 1000;
 function getPcache(q) {
   try {
