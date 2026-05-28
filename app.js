@@ -226,7 +226,7 @@ async function timedFetch(url, ms = 7000) {
 
 async function apiBLS(query) {
   try {
-    const r = await timedFetch(`https://blsdb.de/api/food/search?query=${encodeURIComponent(query)}`);
+    const r = await timedFetch(`https://blsdb.de/api/food/search?query=${encodeURIComponent(query)}`, 3000);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const raw = await r.json();
 
@@ -372,6 +372,25 @@ function setCached(q, items) {
   _qCache.set(q, { items, ts: Date.now() });
 }
 
+const PCACHE_KEY = 'kh_scache';
+const PCACHE_TTL = 24 * 60 * 60 * 1000;
+function getPcache(q) {
+  try {
+    const store = JSON.parse(localStorage.getItem(PCACHE_KEY) || '{}');
+    const e = store[q];
+    return e && Date.now() - e.ts < PCACHE_TTL ? e.items : null;
+  } catch { return null; }
+}
+function setPcache(q, items) {
+  try {
+    const store = JSON.parse(localStorage.getItem(PCACHE_KEY) || '{}');
+    store[q] = { items, ts: Date.now() };
+    const keys = Object.keys(store).sort((a, b) => store[a].ts - store[b].ts);
+    if (keys.length > 50) keys.slice(0, keys.length - 50).forEach(k => delete store[k]);
+    localStorage.setItem(PCACHE_KEY, JSON.stringify(store));
+  } catch {}
+}
+
 let _searchTimer;
 let _searchSeq = 0;
 
@@ -398,12 +417,26 @@ async function runSearch(query) {
   const box = document.getElementById('search-results');
   const cacheKey = query.toLowerCase();
 
-  const cached = getCached(cacheKey);
-  if (cached) {
+  // Session-Cache (3 min)
+  const sessionHit = getCached(cacheKey);
+  if (sessionHit) {
     document.getElementById('search-home-body').style.display = 'none';
-    searchCache = cached;
-    box.innerHTML = cached.length
-      ? cached.map((it,i) => searchCard(it,i)).join('')
+    searchCache = sessionHit;
+    box.innerHTML = sessionHit.length
+      ? sessionHit.map((it,i) => searchCard(it,i)).join('')
+      : `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".</p></div>`;
+    bindSearchCards();
+    return;
+  }
+
+  // Persistenter Cache (24 h) – sofortiges Anzeigen ohne API-Call
+  const persistHit = getPcache(cacheKey);
+  if (persistHit) {
+    document.getElementById('search-home-body').style.display = 'none';
+    searchCache = persistHit;
+    setCached(cacheKey, persistHit);
+    box.innerHTML = persistHit.length
+      ? persistHit.map((it,i) => searchCard(it,i)).join('')
       : `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".</p></div>`;
     bindSearchCards();
     return;
@@ -412,54 +445,69 @@ async function runSearch(query) {
   box.innerHTML = '<div class="spinner"></div>';
   document.getElementById('search-home-body').style.display = 'none';
 
-  let [bls, off] = await Promise.all([apiBLS(query), apiOFFSearch(query)]);
+  // BLS parallel starten (3 s Timeout), OFF abwarten und sofort zeigen
+  const blsPromise = apiBLS(query);
+  let off = await apiOFFSearch(query);
   if (seq !== _searchSeq) return;
 
   if (off === null) {
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 600));
     if (seq !== _searchSeq) return;
     off = await apiOFFSearch(query);
     if (seq !== _searchSeq) return;
   }
 
-  let items = [];
-  if (bls) items.push(...bls);
-  if (off) items.push(...off);
+  function dedupSort(blsItems, offItems) {
+    let items = [];
+    if (blsItems) items.push(...blsItems);
+    if (offItems)  items.push(...offItems);
+    const seen = new Set();
+    items = items.filter(it => {
+      const key = normDE(it.name).replace(/[\s\-]/g, '').slice(0, 42);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return items.sort((a, b) => sortKey(b, query) - sortKey(a, query));
+  }
 
-  if (items.length === 0 && off !== null) {
+  function showItems(items) {
+    if (seq !== _searchSeq) return;
+    searchCache = items;
+    let html = '';
+    if (!items.length) {
+      if (off === null)
+        html = `<div class="alert alert-warning">Datenbank nicht erreichbar – bitte kurz warten und erneut suchen.</div>`;
+      else
+        html = `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".<br>Versuche einen anderen Begriff.</p></div>`;
+    } else {
+      html = items.map((it,i) => searchCard(it,i)).join('');
+    }
+    box.innerHTML = html;
+    bindSearchCards();
+  }
+
+  // OFF-Ergebnisse sofort anzeigen (progressiv)
+  showItems(dedupSort(null, off));
+
+  // BLS abwarten – UI nur aktualisieren, wenn BLS neue Treffer bringt
+  const bls = await blsPromise;
+  if (seq !== _searchSeq) return;
+  if (bls && bls.length) showItems(dedupSort(bls, off));
+
+  // Wortform-Fallback wenn noch keine Ergebnisse
+  if (!searchCache.length && off !== null) {
     const variant = germanVariants(query)[0];
     if (variant) {
       const extra = await apiOFFSearch(variant);
       if (seq !== _searchSeq) return;
-      if (extra) items.push(...extra);
+      if (extra && extra.length) { off = extra; showItems(dedupSort(bls, extra)); }
     }
   }
 
-  const seen = new Set();
-  items = items.filter(it => {
-    const key = normDE(it.name).replace(/[\s\-]/g, '').slice(0, 42);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  items.sort((a, b) => sortKey(b, query) - sortKey(a, query));
-
-  setCached(cacheKey, items);
-  searchCache = items;
-
-  let html = '';
-  if (!items.length) {
-    if (off === null)
-      html += `<div class="alert alert-warning">Datenbank nicht erreichbar – bitte kurz warten und erneut suchen.</div>`;
-    else
-      html += `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".<br>Versuche einen anderen Begriff.</p></div>`;
-  } else {
-    html = items.map((it,i) => searchCard(it,i)).join('');
-  }
-
-  box.innerHTML = html;
-  bindSearchCards();
+  // Ergebnis in beiden Caches speichern
+  setCached(cacheKey, searchCache);
+  setPcache(cacheKey, searchCache);
 }
 
 function searchCard(it, i) {
