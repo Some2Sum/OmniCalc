@@ -347,7 +347,8 @@ function relevance(name, query) {
 function sortKey(item, query) {
   const base = relevance(item.name, query);
   const words = item.name.trim().split(/\s+/).length;
-  return base * 1000 - words;
+  const srcBonus = item.source === 'BLS' ? 10 : 0;
+  return base * 1000 - words + srcBonus;
 }
 
 function germanVariants(q) {
@@ -391,12 +392,29 @@ function setPcache(q, items) {
   } catch {}
 }
 
-function isBasicFood(itemName, query) {
-  const stripped = normDE(itemName.replace(/\s*\(.*?\)\s*/g, '').trim());
+function isBasicFood(item, query) {
+  const name = typeof item === 'string' ? item : item.name;
+  const source = item && typeof item === 'object' ? item.source : null;
+  const stripped = normDE(name.replace(/\s*\(.*?\)\s*/g, '').trim());
   const q = normDE(query.trim());
   if (!stripped.startsWith(q)) return false;
+  // BLS = German federal food composition DB → always unprocessed basic foods
+  if (source === 'BLS') return true;
   const remainder = stripped.slice(q.length);
   return remainder === '' || (remainder.length <= 2 && !/\s/.test(remainder));
+}
+
+function renderGrouped(items, query) {
+  if (!items.length) return '';
+  const basic = items.filter(it => isBasicFood(it, query));
+  const processed = items.filter(it => !isBasicFood(it, query));
+  const twoGroups = basic.length > 0 && processed.length > 0;
+  let html = '';
+  if (twoGroups) html += `<div class="search-group-hd">Lebensmittel</div>`;
+  html += basic.map((it, i) => searchCard(it, i)).join('');
+  if (twoGroups) html += `<div class="search-group-hd">Verarbeitete Produkte</div>`;
+  html += processed.map((it, i) => searchCard(it, basic.length + i)).join('');
+  return html;
 }
 
 let _searchTimer;
@@ -431,7 +449,7 @@ async function runSearch(query) {
     document.getElementById('search-home-body').style.display = 'none';
     searchCache = sessionHit;
     box.innerHTML = sessionHit.length
-      ? sessionHit.map((it,i) => searchCard(it,i)).join('')
+      ? renderGrouped(sessionHit, query)
       : `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".</p></div>`;
     bindSearchCards();
     return;
@@ -444,7 +462,7 @@ async function runSearch(query) {
     searchCache = persistHit;
     setCached(cacheKey, persistHit);
     box.innerHTML = persistHit.length
-      ? persistHit.map((it,i) => searchCard(it,i)).join('')
+      ? renderGrouped(persistHit, query)
       : `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".</p></div>`;
     bindSearchCards();
     return;
@@ -490,13 +508,7 @@ async function runSearch(query) {
       else
         html = `<div class="empty"><p>Keine Ergebnisse für „${esc(query)}".<br>Versuche einen anderen Begriff.</p></div>`;
     } else {
-      const basic = items.filter(it => isBasicFood(it.name, query));
-      const processed = items.filter(it => !isBasicFood(it.name, query));
-      const twoGroups = basic.length > 0 && processed.length > 0;
-      if (twoGroups) html += `<div class="search-group-hd">Lebensmittel</div>`;
-      html += basic.map((it, i) => searchCard(it, i)).join('');
-      if (twoGroups) html += `<div class="search-group-hd">Verarbeitete Produkte</div>`;
-      html += processed.map((it, i) => searchCard(it, basic.length + i)).join('');
+      html += renderGrouped(items, query);
     }
     box.innerHTML = html;
     bindSearchCards();

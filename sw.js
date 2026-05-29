@@ -1,4 +1,4 @@
-const CACHE = 'omnicalc-v11';
+const CACHE = 'omnicalc-v12';
 const ASSETS = ['./style.css', './app.js'];
 
 self.addEventListener('install', e => {
