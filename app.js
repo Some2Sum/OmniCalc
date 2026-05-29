@@ -372,7 +372,7 @@ function setCached(q, items) {
   _qCache.set(q, { items, ts: Date.now() });
 }
 
-const PCACHE_KEY = 'kh_scache2';
+const PCACHE_KEY = 'kh_scache3';
 const PCACHE_TTL = 24 * 60 * 60 * 1000;
 function getPcache(q) {
   try {
@@ -476,6 +476,7 @@ async function runSearch(query) {
       seen.add(key);
       return true;
     });
+    items = items.filter(it => relevance(it.name, query) > 8);
     return items.sort((a, b) => sortKey(b, query) - sortKey(a, query));
   }
 
