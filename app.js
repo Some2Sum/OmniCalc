@@ -13,6 +13,112 @@ let state = {
 
 let searchCache = [];
 let foodModalTarget = null;
+
+// Statische Grundnahrungsmitteldatenbank – Obst, Gemüse und Basiszutaten ohne EAN.
+// Dient als zuverlässiger Fallback, wenn die BLS-API nicht erreichbar ist.
+// KH-Werte (g/100 g) nach BLS / DEBInet (Mittelwerte frisch, roh).
+const BASIC_FOODS = [
+  // Obst
+  { name: 'Ananas',                   carbs100g: 11.9 },
+  { name: 'Apfel',                    carbs100g: 11.4 },
+  { name: 'Aprikose',                 carbs100g:  9.6 },
+  { name: 'Avocado',                  carbs100g:  1.5 },
+  { name: 'Banane',                   carbs100g: 20.0 },
+  { name: 'Birne',                    carbs100g: 11.4 },
+  { name: 'Blaubeere',                carbs100g: 11.4 },
+  { name: 'Brombeere',                carbs100g:  4.8 },
+  { name: 'Dattel, getrocknet',       carbs100g: 64.2 },
+  { name: 'Erdbeere',                 carbs100g:  5.9 },
+  { name: 'Feige, frisch',            carbs100g: 11.5 },
+  { name: 'Granatapfel',              carbs100g: 13.7 },
+  { name: 'Grapefruit',               carbs100g:  8.0 },
+  { name: 'Heidelbeere',              carbs100g: 11.4 },
+  { name: 'Himbeere',                 carbs100g:  5.1 },
+  { name: 'Johannisbeere, rot',       carbs100g:  7.0 },
+  { name: 'Kirsche',                  carbs100g: 13.7 },
+  { name: 'Kiwi',                     carbs100g: 10.1 },
+  { name: 'Mandarine',                carbs100g:  9.0 },
+  { name: 'Mango',                    carbs100g: 14.8 },
+  { name: 'Melone, Honigmelone',      carbs100g:  8.0 },
+  { name: 'Nektarine',                carbs100g:  8.6 },
+  { name: 'Orange',                   carbs100g:  8.7 },
+  { name: 'Papaya',                   carbs100g:  9.0 },
+  { name: 'Pfirsich',                 carbs100g:  8.8 },
+  { name: 'Pflaume',                  carbs100g: 10.2 },
+  { name: 'Stachelbeere',             carbs100g:  7.2 },
+  { name: 'Traube',                   carbs100g: 16.0 },
+  { name: 'Wassermelone',             carbs100g:  7.2 },
+  { name: 'Weintraube',               carbs100g: 16.0 },
+  { name: 'Zitrone',                  carbs100g:  3.0 },
+  { name: 'Zwetschge',                carbs100g: 10.2 },
+  // Gemüse
+  { name: 'Artischocke',              carbs100g:  3.0 },
+  { name: 'Aubergine',                carbs100g:  3.4 },
+  { name: 'Blumenkohl',               carbs100g:  4.1 },
+  { name: 'Bohne, grün',              carbs100g:  4.4 },
+  { name: 'Brokkoli',                 carbs100g:  4.4 },
+  { name: 'Champignon',               carbs100g:  0.3 },
+  { name: 'Chicoree',                 carbs100g:  2.1 },
+  { name: 'Erbse, frisch',            carbs100g: 12.0 },
+  { name: 'Fenchel',                  carbs100g:  5.6 },
+  { name: 'Gurke',                    carbs100g:  2.0 },
+  { name: 'Karotte',                  carbs100g:  6.8 },
+  { name: 'Kartoffel',                carbs100g: 17.0 },
+  { name: 'Knoblauch',                carbs100g: 28.9 },
+  { name: 'Kohlrabi',                 carbs100g:  5.0 },
+  { name: 'Kürbis',                   carbs100g:  6.0 },
+  { name: 'Lauch',                    carbs100g:  5.8 },
+  { name: 'Mais, frisch',             carbs100g: 18.6 },
+  { name: 'Mangold',                  carbs100g:  2.5 },
+  { name: 'Paprika, rot',             carbs100g:  5.3 },
+  { name: 'Paprika, grün',            carbs100g:  4.1 },
+  { name: 'Paprika, gelb',            carbs100g:  5.7 },
+  { name: 'Pastinake',                carbs100g: 14.9 },
+  { name: 'Porree',                   carbs100g:  5.8 },
+  { name: 'Radieschen',               carbs100g:  2.0 },
+  { name: 'Rosenkohl',                carbs100g:  5.5 },
+  { name: 'Rote Bete',                carbs100g:  8.1 },
+  { name: 'Rotkohl',                  carbs100g:  6.0 },
+  { name: 'Salat, Kopfsalat',         carbs100g:  1.7 },
+  { name: 'Sellerie',                 carbs100g:  4.1 },
+  { name: 'Spargel',                  carbs100g:  2.5 },
+  { name: 'Spinat',                   carbs100g:  1.4 },
+  { name: 'Süßkartoffel',             carbs100g: 20.1 },
+  { name: 'Tomate',                   carbs100g:  3.5 },
+  { name: 'Weißkohl',                 carbs100g:  5.4 },
+  { name: 'Wirsing',                  carbs100g:  5.4 },
+  { name: 'Zucchini',                 carbs100g:  3.0 },
+  { name: 'Zwiebel',                  carbs100g:  6.5 },
+  // Hülsenfrüchte (roh/getrocknet)
+  { name: 'Kichererbse, getrocknet',  carbs100g: 45.0 },
+  { name: 'Kidneybohne, getrocknet',  carbs100g: 40.0 },
+  { name: 'Linse, rot',               carbs100g: 40.0 },
+  { name: 'Sojabohne',                carbs100g:  9.9 },
+  // Nüsse & Samen
+  { name: 'Cashewkern',               carbs100g: 26.9 },
+  { name: 'Erdnuss',                  carbs100g:  7.6 },
+  { name: 'Haselnuss',                carbs100g:  6.3 },
+  { name: 'Leinsamen',                carbs100g:  1.6 },
+  { name: 'Mandel',                   carbs100g:  5.7 },
+  { name: 'Sonnenblumenkern',         carbs100g: 11.4 },
+  { name: 'Walnuss',                  carbs100g:  7.0 },
+  // Getreide / Mehl (lose)
+  { name: 'Haferflocken',             carbs100g: 58.7 },
+  { name: 'Reis, roh',                carbs100g: 76.5 },
+  { name: 'Weizenmehl Typ 405',       carbs100g: 73.0 },
+  { name: 'Weizenmehl Typ 550',       carbs100g: 72.0 },
+  // Milch & Ei (unveredelt)
+  { name: 'Ei',                       carbs100g:  0.6 },
+  { name: 'Milch, Vollmilch 3,5%',    carbs100g:  4.8 },
+  { name: 'Milch, Halbfett 1,5%',     carbs100g:  4.8 },
+  { name: 'Naturjoghurt 3,5%',        carbs100g:  4.0 },
+  { name: 'Quark, Magerquark',        carbs100g:  3.5 },
+  // Fleisch & Fisch (roh, kein KH)
+  { name: 'Hühnerbrust, roh',         carbs100g:  0.0 },
+  { name: 'Hackfleisch, gemischt',    carbs100g:  0.0 },
+  { name: 'Lachs, roh',               carbs100g:  0.0 },
+  { name: 'Thunfisch, roh',           carbs100g:  0.0 },
+];
 let nameModalCb = null;
 let scannerActive = false;
 let zxingLoaded = false;
@@ -260,6 +366,13 @@ async function apiBLS(query) {
   }
 }
 
+// Searches the local BASIC_FOODS table — used as primary source when BLS is unavailable.
+function basicFoodsSearch(query) {
+  return BASIC_FOODS
+    .filter(f => relevance(f.name, query) > 8)
+    .map(f => ({ id: uid(), name: f.name, carbs100g: f.carbs100g, source: 'BLS', unit: 'g' }));
+}
+
 async function apiOFFSearch(query) {
   try {
     const url =
@@ -471,6 +584,9 @@ async function runSearch(query) {
   box.innerHTML = '<div class="spinner"></div>';
   document.getElementById('search-home-body').style.display = 'none';
 
+  // Statische Grundnahrungsmittel sofort verfügbar (kein API-Call nötig)
+  const staticItems = basicFoodsSearch(query);
+
   // BLS parallel starten (3 s Timeout), OFF abwarten und sofort zeigen
   const blsPromise = apiBLS(query);
   let off = await apiOFFSearch(query);
@@ -485,6 +601,8 @@ async function runSearch(query) {
 
   function dedupSort(blsItems, offItems) {
     let items = [];
+    // Static basic foods always first, then BLS (if alive), then OFF
+    if (staticItems.length) items.push(...staticItems);
     if (blsItems) items.push(...blsItems);
     if (offItems)  items.push(...offItems);
     const seen = new Set();
