@@ -1,0 +1,9 @@
+{
+  "name": "abakus3000",
+  "version": "1.0.0",
+  "description": "KH-Rechner für Diabetiker",
+  "private": true,
+  "scripts": {
+    "test": "node test.mjs"
+  }
+}
